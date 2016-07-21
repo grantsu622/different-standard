@@ -57,7 +57,9 @@
 void FVR_Initialize(void)
 {
     // CDAFVR off; FVREN enabled; TSRNG Lo_range; ADFVR 1x; TSEN disabled; 
-    FVRCON = 0x81;
+    //FVRCON = 0x81;
+    
+     FVRCON = 0b11000011 ;	//ADC Fixed Voltage Reference Peripheral output is 1x (4.096V)
 }
 
 bool FVR_IsOutputReady(void)

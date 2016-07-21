@@ -24,7 +24,7 @@ CLEAN_SUBPROJECTS=${CLEAN_SUBPROJECTS_${SUBPROJECTS}}
 
 
 # Project Name
-PROJECTNAME=differential-standard
+PROJECTNAME=different-standard
 
 # Active Configuration
 DEFAULTCONF=default

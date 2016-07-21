@@ -66,17 +66,18 @@
 #pragma config LPBOR = OFF    // Low Power Brown-Out Reset Enable Bit->Low power brown-out is disabled
 #pragma config LVP = OFF    // Low-Voltage Programming Enable->High-voltage on MCLR/VPP must be used for programming
 
+
 #include "mcc.h"
 
 void SYSTEM_Initialize(void)
 {
-    
-    PIN_MANAGER_Initialize();
     OSCILLATOR_Initialize();
-    FVR_Initialize();
-    TMR2_Initialize();
-    TMR0_Initialize();
-    ADC_Initialize();
+    PIN_MANAGER_Initialize();
+
+    //FVR_Initialize();
+    //TMR2_Initialize();
+    //TMR0_Initialize();
+    //ADC_Initialize();
 }
 
 void OSCILLATOR_Initialize(void)
@@ -88,7 +89,7 @@ void OSCILLATOR_Initialize(void)
     // TUN 0; 
     OSCTUNE = 0x00;
     // Set the secondary oscillator
-    
+
 }
 
 /**

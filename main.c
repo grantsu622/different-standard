@@ -176,7 +176,10 @@ void main(void)
 
     // Disable the Peripheral Interrupts
     //INTERRUPT_PeripheralInterruptDisable();
-
+#if 0
+    Voltage_Error = IsVoltageError();
+    while(1);
+#endif
     Check_Motor_Status();
 	Check_Hand_Status();
 	switch (Gear_Status_NEW)
@@ -234,7 +237,31 @@ void main(void)
         }
         
         if((Speed < 15)&&(Voltage_Error == 0))	
-        {
+        {	
+            if(Pull_Error == 1 && Pull_Count < PULL_VALUE)												//錯誤模式下
+			{	if( Pull ==1)
+				{	
+					Pull_Count ++;
+					switch(Gear_Status_OLD)
+					{
+						case _4WDLOCK_1:
+								 Error_Mode_Func(_4WDLOCK_1,Status_4WDL);	
+						break;
+						case _2WDLOCK:
+								 Error_Mode_Func(_2WDLOCK,Status_2WDL);	
+						break;
+						case _4WD_1:
+								 Error_Mode_Func(_4WD_1,Status_4WD_1);	
+						break;
+						case _2WD:
+								 Error_Mode_Func(_2WD,Status_2WD);	
+						break;		
+					}
+					Pull_5S_CNT = Pull_Count_Val;
+				}
+				
+            }
+			
             if (Gear_Status_NEW != Gear_Status_OLD)			 //把手狀態
             {
                 Pull_Error = 0;
@@ -283,6 +310,8 @@ void main(void)
 
 /******************************************************************************
 *    Check_Motor_Status and Position status
+*    IO_RA1_L_Signal_GetValue = LOW
+*    IO_RC0_WB_Signal_GetValue = LOW
 ******************************************************************************/
 void Check_Motor_Status(void)
 {	
@@ -391,14 +420,11 @@ void Check_Hand_Status(void)
 ******************************************************************************/
 void LED1_Flash(unsigned int Time)
 {	
-
 	if(LED1_Count >= Time)
-	{	LED1_Count =0;
+	{	
+        LED1_Count =0;
         IO_RC7_Toggle();
 	}
-				
-
-	 
 }
 
 /******************************************************************************
@@ -441,6 +467,93 @@ void Error_Exit_Func(void)
 ******************************************************************************/
 void Error_Mode_Func(unsigned char Goto,unsigned char Status)
 {
+    Moving_Status = Status;
+    _5S_CNT = _1S_Val;															
+    Work_status = 1;
+    Voltage_Error = IsVoltageError();
+    Front_Error = 0 ;
+
+    switch (Goto)
+    {
+        case _4WDLOCK_1:
+            while(IO_RA0_WG_Signal_GetValue() == 0)
+            {
+                Motor1_F();
+                if (Error_Flag == 1)
+                {
+                    Front_Error = 1;
+                    Error_Exit_Func();
+                }
+            }
+            IO_RD6_RELAY_SetHigh(); //relay
+            Front_Error = 0;
+            Error_Exit_Func();
+            break;
+        case _4WD_1:
+            // 2WD -> 4WD        
+            if(IO_RA3_Y_Signal_GetValue() == 1)
+            {
+                while(IO_RA3_Y_Signal_GetValue() == 1)
+                {
+                    Motor1_F();
+                    if (Error_Flag == 1)
+                    {
+                        Front_Error = 1;
+                        Error_Exit_Func();
+                    }
+                }
+                IO_RD6_RELAY_SetHigh(); //relay
+                Front_Error = 0;
+                Error_Exit_Func();
+            }
+            // 4WD Lock -> 4WD        
+            else if (IO_RA3_Y_Signal_GetValue() == 0)
+            {
+                while(IO_RA3_Y_Signal_GetValue() == 0)
+                {
+                    Motor1_R();
+                    if (Error_Flag == 1)
+                    {
+                        Front_Error = 1;
+                        Error_Exit_Func();
+                    }
+                }
+                IO_RD6_RELAY_SetHigh(); //relay
+                Front_Error = 0;
+                Error_Exit_Func();
+            }
+            break;
+        case _2WDLOCK:
+            while(IO_RA0_WG_Signal_GetValue() == 0)
+            {
+                Motor1_R();
+                if (Error_Flag == 1)
+                {
+                    Front_Error = 1;
+                    Error_Exit_Func();
+                }
+            }
+            IO_RD6_RELAY_SetHigh(); //relay
+            Front_Error = 0;
+            Error_Exit_Func();
+            break;
+        case _2WD:
+            while(IO_RA0_WG_Signal_GetValue() == 0)
+            {
+                Motor1_R();
+                if (Error_Flag == 1)
+                {
+                    Front_Error = 1;
+                    Error_Exit_Func();
+                }
+            }
+            IO_RD6_RELAY_SetLow(); //relay
+            Front_Error = 0;
+            Error_Exit_Func();
+            break;
+
+    }
+
 }
 
 /******************************************************************************

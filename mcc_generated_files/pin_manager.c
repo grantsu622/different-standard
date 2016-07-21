@@ -49,16 +49,16 @@
 
 void PIN_MANAGER_Initialize(void)
 {
-    WPUD = 0x0;
+    //WPUD = 0x0;
     LATB = 0x0;
-    WPUE = 0x8;
+    //WPUE = 0x8;
     LATA = 0x0;
     LATE = 0x0;
     LATD = 0x0;
     LATC = 0x0;
-    WPUA = 0x3F;
-    WPUB = 0xC0;
-    WPUC = 0x0;
+    //WPUA = 0x3F;
+    //WPUB = 0xC0;
+    //WPUC = 0x0;
     TRISD = 0x33;
     TRISE = 0x8;
     TRISB = 0xE0;
@@ -68,8 +68,8 @@ void PIN_MANAGER_Initialize(void)
     ANSELA = 0xB4;
     ANSELB = 0x5F;
     ANSELD = 0x4;
-
-    OPTION_REGbits.nWPUEN = 0x0;
+    
+    //OPTION_REGbits.nWPUEN = 0x0; //需註解，會引響ADC 輸入電壓
     APFCON1 = 0x00;
     APFCON2 = 0x00;
 

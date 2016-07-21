@@ -58,9 +58,12 @@
 #define ACQ_US_DELAY 5
 
 //ADC define
-#define OverVoltage			0xC8//3920 / ( 5000 / 256 )				//16V
-#define ADC_LowVoltage  0x6C	//7.5VADCъ计
+//#define OverVoltage			0xC8//3920 / ( 5000 / 256 )				//16V
+//#define ADC_LowVoltage  0x6C	//7.5VADCъ计
 #define FVR_LowVoltage  0x35	//7.5VFVRъ计
+
+#define OverVoltage			0xD6//3920 / ( 5000 / 256 )				//16V
+#define ADC_LowVoltage  0x68	//7.5VADCъ计
 
 /**
   Section: ADC Module APIs
@@ -69,15 +72,26 @@
 void ADC_Initialize(void)
 {
     // set the ADC to the options selected in the User Interface
+#if 0
+    FVRCON = 0b11000011 ;	//ADC Fixed Voltage Reference Peripheral output is 1x (4.096V)
     
+    // ADFM sign_magnitude; ADNREF VSS; ADPREF FVR; ADCS Frc; 
+	ADCON1 = 0b01110011;								//计綼オ
+    
+    // ADRMD 10_bit_mode; GO_nDONE stop; ADON enabled; CHS AN4;
+	ADCON0 = 0b10010001;
+#else
     // ADRMD 10_bit_mode; GO_nDONE stop; ADON enabled; CHS AN4; 
     ADCON0 = 0x91;
     
     // ADFM sign_magnitude; ADNREF VSS; ADPREF VDD; ADCS Frc; 
-    ADCON1 = 0x70;
+    //ADCON1 = 0x70;
     
+    // ADFM sign_magnitude; ADNREF VSS; ADPREF FVR; ADCS Frc; 
+	ADCON1 = 0b01110011;								//计綼オ
+#endif
     // TRIGSEL disabled; CHSN ADNREF; 
-    ADCON2 = 0x0F;
+    ADCON2 = 0xFF;
     
     // ADRESH 0; 
     ADRESH = 0x00;
@@ -134,7 +148,8 @@ adc_result_t ADC_GetConversion(adc_channel_t channel)
     }
     
     // Conversion finished, return the result
-    return ((ADRESH << 8) + ADRESL);
+    //return ((ADRESH << 8) + ADRESL);
+    return (ADRESH);
 }
 
 /*********************************************
@@ -147,46 +162,24 @@ adc_result_t ADC_GetConversion(adc_channel_t channel)
 unsigned char IsVoltageError()
 {
 	unsigned char Error = 0;
-	unsigned int ADC_Data = 0, FVR_Data = 0, Normal_Data = 0, cunt;
-
-	
-    ADC_Initialize();
-	ADC_StartConversion(AN4_VOLT);
+	unsigned int cunt, Normal_Data = 0;	
 
     for (cunt = 0; cunt < 4; cunt++)
 	{
+        FVR_Initialize();
+        ADC_Initialize();
         
-        //for (cunt = 0; cunt < 200; cunt++);
-        while(ADC_IsConversionDone());
-		Normal_Data += ADC_GetConversion(AN4_VOLT) >> 8;
-        
+        // Start the conversion
+        Normal_Data += ADC_GetConversion(AN4_VOLT);        
 	}
+ 
 	Normal_Data = Normal_Data >> 2;
-	
-	FVR_Initialize();
-	
-	for (cunt = 0; cunt < 4; cunt++)
-	{
-        
-		while(!FVR_IsOutputReady());
-		FVR_Data += ADC_GetConversion(channel_FVR) >> 8;
-	}
-	FVR_Data = FVR_Data >> 2;
-	
-	if ((FVR_Data > FVR_LowVoltage) || (Normal_Data < ADC_LowVoltage))											//7.5V,ㄏノFVR 1.024V篈ъ㎝ADCъ
-	{
-		Error = 1;
-	}
-	else if (FVR_Data <= FVR_LowVoltage)
-	{
-		if (Normal_Data > OverVoltage)
-		{
-			Error = 1;
-		}
-		else
-			Error = 0;
-	}
-	
+    
+    if ( (Normal_Data <= ADC_LowVoltage) || (Normal_Data >= OverVoltage))
+        Error = 1;
+    else
+        Error = 0;
+    
 	return Error;
 }
 /**
