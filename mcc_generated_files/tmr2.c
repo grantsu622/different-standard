@@ -208,6 +208,7 @@ void TMR2_DefaultInterruptHandler(void){
 	
 	DelayTime_Count++;
     LED1_Count++;
+    LED2_Count++;
 
     
 }

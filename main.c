@@ -1,4 +1,4 @@
-/**
+/*
   Generated Main Source File
 
   Company:
@@ -46,6 +46,7 @@
 #include "mcc_generated_files/mcc.h"
 
 #define LED_EN  1
+#define  AUTORUN    0
 
 //差速器馬達狀態
 #define	Motor1_Status_2WD_1		0b00001001		//前差RA0/WG,RA1/L,RA3/Y
@@ -81,6 +82,9 @@ unsigned char Over_Speed_Error = 0;
 unsigned char Front_Error	= 0;
 unsigned char Back_Error = 0;
 unsigned char Compare_Error = 0;
+unsigned char IsFistLEDFlash = 0;   //1:is fist, 0:not fist
+unsigned char IsLEDErrorChang = 0;   //1:is Error Change, 0:not Change
+unsigned char LEDError_Status = 0;
 
 //Pull 
 #define Pull_Count_Val  39	//5秒
@@ -104,6 +108,7 @@ unsigned char Motor_Temp = 0;
 unsigned char Motor_Remove = 0;
 unsigned char Special = 0; //Motor error check
 unsigned char Moving_Status;
+unsigned char Is2WDLOCK = 0;
 
 //Gear (齒輪) Hand status
 unsigned int Hand_Status_NEW;
@@ -124,6 +129,7 @@ unsigned char Voltage_Error = 0;
 
 //LED 
 unsigned int LED1_Count = 0;
+unsigned int LED2_Count = 0;
 
 //timer
 #define _1S_Val	8
@@ -139,10 +145,19 @@ unsigned char tmp,error_cnt = 3;
 void Check_Motor_Status(void);
 void Check_Hand_Status(void);
 void LED1_Flash(unsigned int Time);
+void ECU_2WD_4WD_Flash(unsigned int Time);
+void ECU_2WD_LOCK_Flash(unsigned int Time);
+void ECU_4WD_LOCK_Flash(unsigned int Time);
+void ECU_2WD_2WL_Flash(unsigned int Time);
+void ECU_4WD_2WL_Flash(unsigned int Time);
+void ECU_LOCK_2WL_Flash(unsigned int Time);
 void Error_Mode_Func(unsigned char Goto,unsigned char Old_Status);
 void Change_Func(unsigned char Goto,unsigned char Old_Status);
 void Output_ECU(void);
 void Check_Status(void);
+void position_2WD_Error_Flash(void);
+void position_4WD_Error_Flash(void);
+void position_4WDL_Error_Flash(void);
 
 //================================================================================================
 //  寫入燒入程式的版本  
@@ -180,6 +195,7 @@ void main(void)
     while(1);
 #endif
     Check_Motor_Status();
+#if(!AUTORUN)
 	Check_Hand_Status();
 	switch (Hand_Status_NEW)
 	{
@@ -194,7 +210,7 @@ void main(void)
 		default:
 				Handback_Error = 1;
 	}
-	
+#endif	
 	if ( Error_Mode == 1)
 	{
 		Special = 1;
@@ -206,14 +222,39 @@ void main(void)
         // Add your application code
         IOCBN5_NegativeSet();
         
+#if(!AUTORUN)
         LED1_Flash(8);
+#endif
         if (Special == 1)	//開機第一次會做
 		{
 			Special = 0;
 		}
 		else
 		{	
+#if(!AUTORUN)
 			Check_Hand_Status();
+#else
+            if (LED1_Count >= 24)
+            {
+                LED1_Count = 0;
+                switch(Hand_Status_OLD)
+                {
+                    case _4WDLOCK_1:
+                        Hand_Status_NEW = _4WD_1;
+                        break;
+                    case _4WD_1:
+                        Hand_Status_NEW = _2WDLOCK;
+                        break;
+                    case _2WDLOCK:
+                        Hand_Status_NEW = _2WD;
+                        break;
+                    case _2WD:
+                        Hand_Status_NEW = _4WDLOCK_1;
+                        break;
+                }
+            }
+            
+#endif // end of AUTORUN
 			Check_Motor_Status();
             //Check_Position_Status();
             
@@ -343,6 +384,10 @@ void Check_Motor_Status(void)
             Hand_Status_OLD = _4WDLOCK_1;
             Error_Mode = 0;
             break;
+        case Status_2WDL:
+            Hand_Status_OLD = _2WDLOCK;
+            Error_Mode = 0;
+            break;
         default:
             Error_Mode = 1;
     }
@@ -426,6 +471,83 @@ void LED1_Flash(unsigned int Time)
 	{	
         LED1_Count =0;
         IO_RC7_Toggle();
+	}
+}
+
+/******************************************************************************
+*   2WD_4WD flash 
+******************************************************************************/
+void ECU_2WD_4WD_Flash(unsigned int Time)
+{	
+	if(LED2_Count >= Time)
+	{	
+        LED2_Count =0;
+        IO_RD7_ECU_2W_Toggle();
+        IO_RB0_ECU_4W_Toggle();
+	}
+}
+
+/******************************************************************************
+*   2WD_4WDLOCK flash 
+******************************************************************************/
+void ECU_2WD_LOCK_Flash(unsigned int Time)
+{	
+	if(LED2_Count >= Time)
+	{	
+        LED2_Count =0;
+        IO_RD7_ECU_2W_Toggle();
+        IO_RB1_ECU_4WL_Toggle();
+	}
+}
+
+/******************************************************************************
+*   2WD_2WL flash 
+******************************************************************************/
+void ECU_2WD_2WL_Flash(unsigned int Time)
+{	
+	if(LED2_Count >= Time)
+	{	
+        LED2_Count =0;
+        IO_RD7_ECU_2W_Toggle();
+        IO_RB2_ECU_2WL_Toggle(); 
+	}
+}
+/******************************************************************************
+*   4WD_4WDLOCK flash 
+******************************************************************************/
+void ECU_4WD_LOCK_Flash(unsigned int Time)
+{	
+	if(LED2_Count >= Time)
+	{	
+        LED2_Count =0;
+        IO_RB0_ECU_4W_Toggle();
+        IO_RB1_ECU_4WL_Toggle();
+	}
+}
+
+/******************************************************************************
+*   4WD_2WL flash 
+******************************************************************************/
+void ECU_4WD_2WL_Flash(unsigned int Time)
+{	
+	if(LED2_Count >= Time)
+	{	
+        LED2_Count =0;
+        IO_RB0_ECU_4W_Toggle();
+        IO_RB2_ECU_2WL_Toggle(); 
+	}
+}
+
+/******************************************************************************
+*   4WDLOCK_2WL flash 
+******************************************************************************/
+void ECU_LOCK_2WL_Flash(unsigned int Time)
+{	
+	if(LED2_Count >= Time)
+	{	
+        LED2_Count =0;
+        IO_RB1_ECU_4WL_Toggle();
+        IO_RB2_ECU_2WL_Toggle(); 
 	}
 }
 
@@ -605,6 +727,8 @@ void Error_Mode_Func(unsigned char Goto,unsigned char Old_Status)
 void Change_Func(unsigned char Goto,unsigned char Old_Status)
 {
     Moving_Status = Old_Status;
+    LEDError_Status = Old_Status;
+
     _5S_CNT = _1S_Val;															
     Work_status = 1;
     Voltage_Error = IsVoltageError();
@@ -770,6 +894,12 @@ void Compare_Motor_Position(void)
 ******************************************************************************/
 void Output_ECU(void)
 {
+    if (Error_Mode == 0)
+    {
+        IsFistLEDFlash = 1;
+        //IsLEDErrorChange = 0;
+    }
+
     if(Handback_Error == 1)
     {
         IO_RD7_ECU_2W_SetHigh(); 
@@ -780,19 +910,29 @@ void Output_ECU(void)
     }
     else if (Error_Mode == 1)
     {
-        IO_RD7_ECU_2W_SetHigh(); 
-        IO_RB0_ECU_4W_SetHigh(); 
-        IO_RB1_ECU_4WL_SetHigh(); 
-        IO_RB2_ECU_2WL_SetHigh(); 
+        switch(Position_Status)
+        {
+            case Position_Status_2WD:
+                position_2WD_Error_Flash();
+           
+                break;
+            case Position_Status_4WD:
+                position_4WD_Error_Flash();
+               break;
+            case Position_Status_4WDL:
+                position_4WDL_Error_Flash();
+                
+                break;
+        }
 
     }
-    //else if((Motor_Temp == Status_2WD) && (IO_RD6_RELAY_GetValue() == 0))
     else if(Motor_Temp == Status_2WDL)
     {
         IO_RD7_ECU_2W_SetHigh(); 
         IO_RB0_ECU_4W_SetHigh(); 
         IO_RB1_ECU_4WL_SetHigh(); 
         IO_RB2_ECU_2WL_SetLow(); 
+        Is2WDLOCK = 1;
     }
     else if(Motor_Temp == Status_2WD)
     {
@@ -800,6 +940,7 @@ void Output_ECU(void)
         IO_RB0_ECU_4W_SetHigh(); 
         IO_RB1_ECU_4WL_SetHigh(); 
         IO_RB2_ECU_2WL_SetHigh(); 
+        Is2WDLOCK = 0;
     }
     else if((Motor_Temp == Status_4WD_1) || (Motor_Temp == Status_4WD_2))
     {
@@ -831,7 +972,7 @@ void Check_Status(void)
                 Pull_Error = 0;
             }
             break;
-        case _2WDLOCK: // check issue?
+        case _2WDLOCK: 
             if(Motor_Temp == Status_2WDL) 
             {
                 Error_Mode = 0;
@@ -855,6 +996,248 @@ void Check_Status(void)
         default:
             Error_Mode = 1;
             Pull_Error = 1;
+    }
+}
+/******************************************************************************
+*  Position 2WD Error Flash
+*  檔位-2WD與馬達位置不符合
+******************************************************************************/
+void position_2WD_Error_Flash(void)
+{
+    if (( Hand_Status_NEW == _4WDLOCK_1 && (Moving_Status == _2WD || (Moving_Status == _4WD_1 && Is2WDLOCK == 0))))
+    {
+        if (IsFistLEDFlash)
+        {
+            IO_RB0_ECU_4W_SetHigh(); //初始化其他燈號
+            IO_RB2_ECU_2WL_SetHigh();
+            
+            IO_RD7_ECU_2W_SetLow(); 
+            IO_RB1_ECU_4WL_SetHigh(); 
+            IsFistLEDFlash = 0;
+        }
+        if ( LEDError_Status == _2WDLOCK || LEDError_Status == _4WD_1 || LEDError_Status == _4WD_2)
+        {
+            IO_RB0_ECU_4W_SetHigh(); //初始化其他燈號
+            IO_RB2_ECU_2WL_SetHigh();
+            IO_RD7_ECU_2W_SetLow(); 
+            IO_RB1_ECU_4WL_SetHigh(); 
+            LEDError_Status = 0; 
+        }
+        ECU_2WD_LOCK_Flash(4);
+    }
+    else if (( Hand_Status_NEW == _4WDLOCK_1 && (Moving_Status == _2WDLOCK || (Moving_Status == _4WD_1 && Is2WDLOCK == 1))))//M:2WD,P:2WD,H:2WL
+    {
+        if (IsFistLEDFlash)
+        {
+            IO_RD7_ECU_2W_SetHigh();
+            IO_RB0_ECU_4W_SetHigh(); //初始化其他燈號
+            
+            IO_RB1_ECU_4WL_SetHigh(); 
+            IO_RB2_ECU_2WL_SetLow(); 
+            IsFistLEDFlash = 0;
+        }
+        if ( LEDError_Status == _2WD || LEDError_Status == _4WD_1 || LEDError_Status == _4WD_2)
+        {
+            IO_RD7_ECU_2W_SetHigh();
+            IO_RB0_ECU_4W_SetHigh(); //初始化其他燈號
+            IO_RB1_ECU_4WL_SetHigh(); 
+            IO_RB2_ECU_2WL_SetLow(); 
+            LEDError_Status = 0; 
+        }
+        ECU_LOCK_2WL_Flash(4);
+    }
+    else if ( Hand_Status_NEW == _4WD_1 && (Moving_Status == _2WD || (Moving_Status == _4WDLOCK_1 && Is2WDLOCK == 0)))//M:4WD,P:2WD,H:4WD
+    {
+        if (IsFistLEDFlash)
+        {
+            IO_RB1_ECU_4WL_SetHigh(); //初始化其他燈號
+            IO_RB2_ECU_2WL_SetHigh();
+            
+            IO_RD7_ECU_2W_SetLow(); 
+            IO_RB0_ECU_4W_SetHigh(); 
+            IsFistLEDFlash = 0;
+        }
+        if ( LEDError_Status == _2WDLOCK || LEDError_Status == _4WD_1 
+                || LEDError_Status == _4WD_2 || LEDError_Status == _4WDLOCK_1)
+        {
+            IO_RB1_ECU_4WL_SetHigh(); //初始化其他燈號
+            IO_RB2_ECU_2WL_SetHigh();
+            
+            IO_RD7_ECU_2W_SetLow(); 
+            IO_RB0_ECU_4W_SetHigh(); 
+            LEDError_Status = 0;
+        }
+        ECU_2WD_4WD_Flash(4);
+    }
+    else if ( Hand_Status_NEW == _4WD_1 && (Moving_Status == _2WDLOCK || (Moving_Status == _4WDLOCK_1 && Is2WDLOCK == 1)))//M:4WD,P:2WD,H:4WD
+    {
+        if (IsFistLEDFlash)
+        {
+            IO_RB1_ECU_4WL_SetHigh(); //初始化其他燈號
+            IO_RD7_ECU_2W_SetHigh();
+            
+            IO_RB2_ECU_2WL_SetLow();
+            IO_RB0_ECU_4W_SetHigh(); 
+            IsFistLEDFlash = 0;
+        }
+        if ( LEDError_Status == _4WDLOCK_1 || LEDError_Status == _4WD_1 
+                || LEDError_Status == _4WD_2 || LEDError_Status == _2WDLOCK)
+        {
+            IO_RB1_ECU_4WL_SetHigh(); //初始化其他燈號
+            IO_RD7_ECU_2W_SetHigh();
+            
+            IO_RB2_ECU_2WL_SetLow();
+            IO_RB0_ECU_4W_SetHigh(); 
+            LEDError_Status = 0;
+        }
+        ECU_4WD_2WL_Flash(4);
+    }
+}
+/******************************************************************************
+*  Position 4WD Error Flash
+*  檔位-4WD與馬達位置不符合
+******************************************************************************/
+void position_4WD_Error_Flash(void)
+{
+    if((Motor_Front_Status == Motor1_Status_2WD_1) && 
+            (Hand_Status_NEW == _2WD))//M:2WD,P:4WD,H:2WD
+    {
+        if (IsFistLEDFlash)
+        {
+            IO_RB1_ECU_4WL_SetHigh(); //初始化其他燈號
+            IO_RB2_ECU_2WL_SetHigh();
+                    
+            IO_RD7_ECU_2W_SetHigh(); 
+            IO_RB0_ECU_4W_SetLow(); 
+            IsFistLEDFlash = 0;
+        }
+        if ( LEDError_Status == _2WDLOCK || LEDError_Status == _4WDLOCK_1 )
+        {
+            IO_RB1_ECU_4WL_SetHigh(); //初始化其他燈號
+            IO_RB2_ECU_2WL_SetHigh();
+            IO_RD7_ECU_2W_SetHigh(); 
+            IO_RB0_ECU_4W_SetLow(); 
+            LEDError_Status = 0;
+        }
+        
+        ECU_2WD_4WD_Flash(4);
+    }
+    else if (Motor_Front_Status == Motor1_Status_4WL_1 && ( Hand_Status_NEW == _4WDLOCK_1))//M:4WDL,P:4WD,H:4WDL
+    {
+        if (IsFistLEDFlash)
+        {
+            IO_RD7_ECU_2W_SetHigh();//初始化其他燈號
+            IO_RB2_ECU_2WL_SetHigh();
+            
+            IO_RB0_ECU_4W_SetLow(); 
+            IO_RB1_ECU_4WL_SetHigh(); 
+            IsFistLEDFlash = 0;
+        }
+        if ( LEDError_Status == _2WD || LEDError_Status == _2WDLOCK || LEDError_Status == _4WDLOCK_1)
+        {
+            IO_RD7_ECU_2W_SetHigh();//初始化其他燈號
+            IO_RB2_ECU_2WL_SetHigh();
+            IO_RB0_ECU_4W_SetLow(); 
+            IO_RB1_ECU_4WL_SetHigh(); 
+            LEDError_Status = 0;
+        }
+        ECU_4WD_LOCK_Flash(4);
+    }
+    else if ( Hand_Status_NEW == _2WDLOCK)//M:2WD,P:4WD,H:2WL
+    {
+        if (IsFistLEDFlash)
+        {
+            IO_RD7_ECU_2W_SetHigh();//初始化其他燈號
+            IO_RB1_ECU_4WL_SetHigh();
+            
+            IO_RB0_ECU_4W_SetLow(); 
+            IO_RB2_ECU_2WL_SetHigh(); 
+            IsFistLEDFlash = 0;
+        }
+        if ( LEDError_Status == _2WD || LEDError_Status == _2WDLOCK || LEDError_Status == _4WDLOCK_1)
+        {
+            IO_RD7_ECU_2W_SetHigh();//初始化其他燈號
+            IO_RB1_ECU_4WL_SetHigh();
+            IO_RB0_ECU_4W_SetLow(); 
+            IO_RB2_ECU_2WL_SetHigh(); 
+            LEDError_Status = 0;
+        }
+        
+        ECU_4WD_2WL_Flash(4);
+    }
+} 
+/******************************************************************************
+*  Position 4WDL Error Flash
+*  檔位-4WDL與馬達位置不符合
+******************************************************************************/
+void position_4WDL_Error_Flash(void)
+{
+    if ( Hand_Status_NEW == _2WD)
+    {
+        if (IsFistLEDFlash)
+        {
+            IO_RB2_ECU_2WL_SetHigh(); //初始化其他燈號
+            IO_RB0_ECU_4W_SetHigh(); 
+            
+            IO_RD7_ECU_2W_SetHigh(); 
+            IO_RB1_ECU_4WL_SetLow(); 
+            IsFistLEDFlash = 0;
+        }
+        if ( LEDError_Status == _2WDLOCK 
+                || (LEDError_Status == _4WD_1 || LEDError_Status == _4WD_2 ))
+        {
+            IO_RB2_ECU_2WL_SetHigh(); //初始化其他燈號
+            IO_RB0_ECU_4W_SetHigh(); 
+            IO_RD7_ECU_2W_SetHigh(); 
+            IO_RB1_ECU_4WL_SetLow(); 
+            LEDError_Status = 0;
+        }
+        ECU_2WD_LOCK_Flash(4);
+    }//M:4WD,P:4WDL,H:4WD
+    else if(((Motor_Front_Status == Motor1_Status_4WD_1) 
+                || (Motor_Front_Status == Motor1_Status_4WD_2))
+                && (Hand_Status_NEW == _4WD_1))
+    {
+        if (IsFistLEDFlash)
+        {
+            IO_RD7_ECU_2W_SetHigh();//初始化其他燈號
+            IO_RB2_ECU_2WL_SetHigh();
+            
+            IO_RB0_ECU_4W_SetLow(); 
+            IO_RB1_ECU_4WL_SetHigh(); 
+            IsFistLEDFlash = 0;
+        }
+        if ( LEDError_Status == _2WD || LEDError_Status == _2WDLOCK)
+        {
+            IO_RD7_ECU_2W_SetHigh();//初始化其他燈號
+            IO_RB2_ECU_2WL_SetHigh();
+            IO_RB0_ECU_4W_SetLow(); 
+            IO_RB1_ECU_4WL_SetHigh(); 
+            LEDError_Status = 0;
+        }
+
+        ECU_4WD_LOCK_Flash(4);
+    }
+    else if ( Hand_Status_NEW == _2WDLOCK)//M:2WD,P:4WDL,H:2WL
+    {
+        if (IsFistLEDFlash)
+        {
+            IO_RD7_ECU_2W_SetHigh();
+            IO_RB0_ECU_4W_SetHigh(); //初始化其他燈號
+            
+            IO_RB1_ECU_4WL_SetLow(); 
+            IO_RB2_ECU_2WL_SetHigh(); 
+            IsFistLEDFlash = 0;
+        }
+        if ( LEDError_Status == _2WD || (LEDError_Status == _4WD_1 || LEDError_Status == _4WD_2))
+        {
+            IO_RD7_ECU_2W_SetHigh();
+            IO_RB0_ECU_4W_SetHigh(); //初始化其他燈號
+            IO_RB1_ECU_4WL_SetLow(); 
+            IO_RB2_ECU_2WL_SetHigh(); 
+            LEDError_Status = 0;
+        }
+        ECU_LOCK_2WL_Flash(4);
     }
 }
 /**
