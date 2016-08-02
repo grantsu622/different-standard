@@ -59,8 +59,7 @@ void interrupt INTERRUPT_InterruptManager (void)
     {
         PIN_MANAGER_IOC();
                 
-        // clear global interrupt-on-change flag
-        INTCONbits.IOCIF = 0;
+        
     }
     else if(PIE1bits.TMR2IE == 1 && PIR1bits.TMR2IF == 1)
     {

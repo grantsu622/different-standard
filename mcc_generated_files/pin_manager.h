@@ -126,6 +126,7 @@
 #define IO_RA3_Y_Signal_SetLow()   do { LATA3 = 0; } while(0)
 #define IO_RA3_Y_Signal_Toggle()   do { LATA3 = ~LATA3; } while(0)
 #define IO_RA3_Y_Signal_GetValue()         PORTAbits.RA3
+//#define IO_RA3_Y_Signal_GetValue()         (PORTA & 0x08 >> 3)
 #define IO_RA3_Y_Signal_SetDigitalInput()    do { TRISA3 = 1; } while(0)
 #define IO_RA3_Y_Signal_SetDigitalOutput()   do { TRISA3 = 0; } while(0)
 
@@ -645,6 +646,7 @@
 
 extern unsigned char Speed,Speed_U, Speed_H,Speed_L;
 extern unsigned char Speed_Work_Status, Seep_256ms_Cnt, Speed_rd;
+extern unsigned char tmp, error_cnt;
 
 /**
  * @Param

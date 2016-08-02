@@ -56,7 +56,7 @@ uint8_t gu8TMR2State = 0;
 uint8_t u8ErrorState = 0;
 uint8_t u8RPM1SCunt = 0;
 
-unsigned int	DelayTime_Count = 0;
+static unsigned int	DelayTime_Count = 0;
 
 /**
   Section: TMR2 APIs
@@ -83,6 +83,9 @@ void TMR2_Initialize(void)
 
     // Set Default Interrupt Handler
     TMR2_SetInterruptHandler(TMR2_DefaultInterruptHandler);
+    
+    // Start Timer
+    TMR2_StartTimer();
 }
 
 void TMR2_StartTimer(void)
@@ -202,7 +205,6 @@ void TMR2_DefaultInterruptHandler(void){
 		}
 		
 	}
-    
 	
 	DelayTime_Count++;
     LED1_Count++;

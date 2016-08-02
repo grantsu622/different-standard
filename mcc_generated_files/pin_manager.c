@@ -64,10 +64,14 @@ void PIN_MANAGER_Initialize(void)
     TRISB = 0xE0;
     TRISC = 0x7;
     TRISA = 0x2B;
-    ANSELE = 0x7;
+    /*ANSELE = 0x7;
     ANSELA = 0xB4;
     ANSELB = 0x5F;
-    ANSELD = 0x4;
+    ANSELD = 0x4;*/
+    ANSELA = 0b00010000 ;					//max2014
+	ANSELB = 0x00 ;		
+	ANSELD = 0x00 ;	
+	ANSELE = 0x00 ;
     
     //OPTION_REGbits.nWPUEN = 0x0; //需註解，會引響ADC 輸入電壓
     APFCON1 = 0x00;
@@ -81,7 +85,8 @@ void PIN_MANAGER_Initialize(void)
 
 	// interrupt on change for group IOCBP - positive
 	IOCBPbits.IOCBP5 = 0; // Pin : RB5
-
+    
+    INTCONbits.IOCIF = 0;
     INTCONbits.IOCIE = 1; // Enable IOCI interrupt 
 
 
@@ -116,9 +121,15 @@ void PIN_MANAGER_IOC(void)
 	if(IOCBFbits.IOCBF5 == 1)
 	{
 		IOCBFbits.IOCBF5 = 0;
+        
+        // clear global interrupt-on-change flag
+        INTCONbits.IOCIF = 0;
+        
 		// Add handler code here for Pin - RB5
         
+        //TMR0_WriteTimer(256-60);
         TMR0_WriteTimer(256-60);
+        //TMR0_Reload();
         TMR0_InterruptEnable();
 
         Speed_U = 0;
@@ -126,6 +137,7 @@ void PIN_MANAGER_IOC(void)
         Speed_L = 0;
         Speed_Work_Status = 0;
         Seep_256ms_Cnt = 3;
+        error_cnt = 3;
         
         INTCONbits.IOCIE = 0; // Disable IOCI interrupt 
 	}

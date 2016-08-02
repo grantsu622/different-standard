@@ -72,7 +72,7 @@
 void ADC_Initialize(void)
 {
     // set the ADC to the options selected in the User Interface
-#if 0
+#if 1
     FVRCON = 0b11000011 ;	//ADC Fixed Voltage Reference Peripheral output is 1x (4.096V)
     
     // ADFM sign_magnitude; ADNREF VSS; ADPREF FVR; ADCS Frc; 
@@ -166,7 +166,7 @@ unsigned char IsVoltageError()
 
     for (cunt = 0; cunt < 4; cunt++)
 	{
-        FVR_Initialize();
+        //FVR_Initialize();
         ADC_Initialize();
         
         // Start the conversion
@@ -179,7 +179,7 @@ unsigned char IsVoltageError()
         Error = 1;
     else
         Error = 0;
-    
+     //Error = 0;
 	return Error;
 }
 /**

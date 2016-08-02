@@ -64,17 +64,18 @@ void TMR0_Initialize(void)
 {
     // Set TMR0 to the options selected in the User Interface
 
-    // PSA assigned; PS 1:4; TMRSE Increment_hi_lo; mask the nWPUEN and INTEDG bits
-    OPTION_REG = (OPTION_REG & 0xC0) | 0xD1 & 0x3F; 
+    // PSA assigned; PS 1:4; TMRSE Increment_lo_hi; mask the nWPUEN and INTEDG bits
+    OPTION_REG = (OPTION_REG & 0xC0) | 0x01 & 0x3F; 
+    //OPTION_REG = 0b11000001;
 
     // TMR0 144; 
     TMR0 = 0x0;
 
     // Load the TMR value to reload variable
-    timer0ReloadVal= 144;
+    timer0ReloadVal= 256 - 119;
 
     // Clear Interrupt flag before enabling the interrupt
-    INTCONbits.TMR0IF = 256 - 119;
+    INTCONbits.TMR0IF = 0;
 
     // Enabling TMR0 interrupt
     //INTCONbits.TMR0IE = 1;
@@ -105,7 +106,7 @@ void TMR0_Reload(void)
 void TMR0_InterruptEnable(void)
 {
     // clear global interrupt-on-change flag
-    INTCONbits.IOCIF = 0;
+    //INTCONbits.IOCIF = 0;
 
     // Clear Interrupt flag before enabling the interrupt
     INTCONbits.TMR0IF = 0;
@@ -129,10 +130,11 @@ void TMR0_ISR(void)
 
     TMR0 = timer0ReloadVal;
 
-
+    IO_RC6_SetHigh();
     // add your TMR0 interrupt custom code
     if(IO_RB5_RPM_GetValue()) tmp = 1;
     else tmp = 0;
+    IO_RC6_SetLow();
 
     switch(Speed_Work_Status)
     {
@@ -150,6 +152,7 @@ void TMR0_ISR(void)
             if(tmp) Speed_U = Speed_U | 0x01;
             Speed_U = Speed_U << 1;
             Speed_Work_Status++;
+             break;
         case 4:
             if(tmp) Speed_U = Speed_U | 0x01;
             Speed_Work_Status++;
@@ -160,11 +163,11 @@ void TMR0_ISR(void)
 			if(tmp) Speed_H = Speed_H | 0x01;
 			Speed_H = Speed_H << 1;
 			Speed_Work_Status++;
-		break;
+            break;
 		case 8 :
 			if(tmp) Speed_H = Speed_H | 0x01;
 			Speed_Work_Status++;
-		break;
+            break;
         case 9:
         case 10:
         case 11:
@@ -190,7 +193,7 @@ void TMR0_ISR(void)
 
             break;
             // Enabling TMR0 interrupt
-            INTCONbits.TMR0IE = 0;
+            //INTCONbits.TMR0IE = 0;
     }
 }
 

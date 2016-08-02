@@ -58,20 +58,20 @@
 #define Position_Status_4WD 0b00000100  //RC0/WB, RC1/WL, RC2/WR
 #define Position_Status_4WDL 0b00000110  //RC0/WB, RC1/WL, RC2/WR
 
-//差速器馬達狀態(前4bits) + 檔位狀態(後4bits)
-#define Status_2WD 0b00001001
-#define Status_2WDL 0b00001001
-#define Status_4WD_1 0b01001000
-#define Status_4WD_2 0b01000000
-#define Status_4WDL 0b01100001
+//差速器馬達狀態(前4bits) + 檔位狀態(後3bits) + MSB(Lock(0) or UNLOCK(1))
+#define Status_2WD 0b10001001   //0x19
+#define Status_2WDL 0b00001001  //0x09
+#define Status_4WD_1 0b01001000 //0x48
+#define Status_4WD_2 0b01000000 //0x40
+#define Status_4WDL 0b01100001  //0x31
 
 //把手訊號
-#define _4WDLOCK_1				0b00000000 			    //0b00010010                   
-#define _4WDLOCK_2				0b00100000 			    //0b00110010                   								
-#define _4WD_1					0b00000001  			//0b00010001                  
-#define _4WD_2					0b00100001			    //0b00110001                    
-#define _2WDLOCK				0b00000011			    //0b00000011                    
-#define _2WD					0b00100011 			    //0b00100011                   
+#define _4WDLOCK_1				0b00110010 			    //0b00010010                   
+#define _4WDLOCK_2				0b00110010 			    //0b00110010                   								
+#define _4WD_1					0b00110001  			//0b00010001                  
+#define _4WD_2					0b00110001			    //0b00110001                    
+#define _2WDLOCK				0b00100011			    //0b00000011                    
+#define _2WD					0b00010011 			    //0b00100011                   
 
 //Error
 unsigned char Work_status = 0;
@@ -81,8 +81,6 @@ unsigned char Over_Speed_Error = 0;
 unsigned char Front_Error	= 0;
 unsigned char Back_Error = 0;
 unsigned char Compare_Error = 0;
-
-
 
 //Pull 
 #define Pull_Count_Val  39	//5秒
@@ -107,18 +105,16 @@ unsigned char Motor_Remove = 0;
 unsigned char Special = 0; //Motor error check
 unsigned char Moving_Status;
 
-
-//Gear (齒輪)
-unsigned char Gear_Status_NEW;
-unsigned char Gear_Status_OLD = 0;
+//Gear (齒輪) Hand status
+unsigned int Hand_Status_NEW;
+unsigned int Hand_Status_OLD = 0;
 
 //Position (檔位)
-unsigned char Position_Status_NEW;
-unsigned char Position_Status_OLD = 0;
+unsigned int Position_Status_NEW;
+unsigned int Position_Status_OLD = 0;
 unsigned char Position_Temp = 0;
 unsigned char Error_Position = 0;
 unsigned char Position_Status = 0;
-
 
 //Hand feedback
 unsigned char	Handback_Error = 0;			//把手失效錯誤
@@ -143,8 +139,8 @@ unsigned char tmp,error_cnt = 3;
 void Check_Motor_Status(void);
 void Check_Hand_Status(void);
 void LED1_Flash(unsigned int Time);
-void Error_Mode_Func(unsigned char Goto,unsigned char Status);
-void Change_Func(unsigned char Goto,unsigned char Status);
+void Error_Mode_Func(unsigned char Goto,unsigned char Old_Status);
+void Change_Func(unsigned char Goto,unsigned char Old_Status);
 void Output_ECU(void);
 void Check_Status(void);
 
@@ -176,13 +172,16 @@ void main(void)
 
     // Disable the Peripheral Interrupts
     //INTERRUPT_PeripheralInterruptDisable();
+
+    IO_RC7_SetHigh();
+
 #if 0
     Voltage_Error = IsVoltageError();
     while(1);
 #endif
     Check_Motor_Status();
 	Check_Hand_Status();
-	switch (Gear_Status_NEW)
+	switch (Hand_Status_NEW)
 	{
 		case _4WDLOCK_1:
 				Handback_Error = 0;
@@ -199,14 +198,15 @@ void main(void)
 	if ( Error_Mode == 1)
 	{
 		Special = 1;
-		Gear_Status_NEW = _2WD;
+		Hand_Status_NEW = _2WD;
 	}
     
     while (1)
     {
         // Add your application code
         IOCBN5_NegativeSet();
-
+        
+        LED1_Flash(8);
         if (Special == 1)	//開機第一次會做
 		{
 			Special = 0;
@@ -235,14 +235,16 @@ void main(void)
         {
 		    Voltage_Error = IsVoltageError();
         }
-        
+        //Speed=3;
+        //if (Speed < 30)
+        //    while(1);
         if((Speed < 15)&&(Voltage_Error == 0))	
         {	
             if(Pull_Error == 1 && Pull_Count < PULL_VALUE)												//錯誤模式下
 			{	if( Pull ==1)
 				{	
 					Pull_Count ++;
-					switch(Gear_Status_OLD)
+					switch(Hand_Status_OLD)
 					{
 						case _4WDLOCK_1:
 								 Error_Mode_Func(_4WDLOCK_1,Status_4WDL);	
@@ -262,44 +264,43 @@ void main(void)
 				
             }
 			
-            if (Gear_Status_NEW != Gear_Status_OLD)			 //把手狀態
+            if (Hand_Status_NEW != Hand_Status_OLD)			 //把手狀態
             {
                 Pull_Error = 0;
                 Pull_Count = 0;
                 Pull_5S_CNT = Pull_Count_Val;
                 
-                switch (Gear_Status_NEW)
+                switch (Hand_Status_NEW)
                 {
                     case _4WDLOCK_1:
                         if (Speed < 3)
                         {
-                            Change_Func(_4WDLOCK_1,Status_4WDL);
-                            Gear_Status_OLD = Gear_Status_NEW;
+                            Change_Func(_4WDLOCK_1,Hand_Status_OLD);
+                            Hand_Status_OLD = Hand_Status_NEW;
                         }
                         break;
                     case _2WDLOCK:
                         if (Speed < 3)
                         {
-                            Change_Func(_2WDLOCK, Status_2WDL);
-                            Gear_Status_OLD = Gear_Status_NEW;
+                            Change_Func(_2WDLOCK, Hand_Status_OLD);
+                            Hand_Status_OLD = Hand_Status_NEW;
                         }
                         break;
                     case _4WD_1:
                         if (Speed < 15)
                         {
-                            Change_Func(_4WD_1, Status_4WD_1);
-                            Gear_Status_OLD = Gear_Status_NEW;
+                            Change_Func(_4WD_1, Hand_Status_OLD);
+                            Hand_Status_OLD = Hand_Status_NEW;
                         }
                         break;
                     case _2WD:
                         if (Speed < 15)
                         {
-                            Change_Func(_2WD, Status_2WD);
-                            Gear_Status_OLD = Gear_Status_NEW;
+                            Change_Func(_2WD, Hand_Status_OLD);
+                            Hand_Status_OLD = Hand_Status_NEW;
                         }
                         break;
                 }
-
             }
             //Compare_Motor_Position();
             Check_Status();
@@ -317,29 +318,29 @@ void Check_Motor_Status(void)
 {	
     Motor_Temp = 0;
 
-    Motor_Front_Status = (IO_RA0_WG_Signal_GetValue() << 0) || (IO_RA1_L_Signal_GetValue() << 1) 
-                            || (IO_RA3_Y_Signal_GetValue() << 3); 
+    Motor_Front_Status = (IO_RA0_WG_Signal_GetValue() << 0) | (IO_RA1_L_Signal_GetValue() << 1) 
+                            | (IO_RA3_Y_Signal_GetValue() << 3);
     
-    Position_Status = (IO_RC0_WB_Signal_GetValue() << 0) || (IO_RC1_WL_Signal_GetValue() << 1) 
-                            || (IO_RC2_WR_Signal_GetValue() << 3);
+    Position_Status = (IO_RC0_WB_Signal_GetValue() << 0) | (IO_RC1_WL_Signal_GetValue() << 1) 
+                            | (IO_RC2_WR_Signal_GetValue() << 2);
     
-    Motor_Temp = Motor_Front_Status | (Position_Status << 4);                        
+    Motor_Temp = Motor_Front_Status | (Position_Status << 4) | (IO_RD6_RELAY_GetValue() << 7);                        
     switch( Motor_Temp)
     {
         case Status_2WD:	
-            Gear_Status_OLD = _2WD;
+            Hand_Status_OLD = _2WD;
             Error_Mode = 0;
             break;
         case Status_4WD_1:
-            Gear_Status_OLD = _4WD_1;
+            Hand_Status_OLD = _4WD_1;
             Error_Mode = 0;
             break;
         case Status_4WD_2:
-            Gear_Status_OLD = _4WD_1;
+            Hand_Status_OLD = _4WD_1;
             Error_Mode = 0;
             break;
         case Status_4WDL:
-            Gear_Status_OLD = _4WDLOCK_1;
+            Hand_Status_OLD = _4WDLOCK_1;
             Error_Mode = 0;
             break;
         default:
@@ -384,15 +385,16 @@ void Check_Hand_Status(void)
 {
     unsigned char Loop = 1, k = 3;
 	do
-	{	Delay_128msec(1);
-		Gear_Status_NEW = (IO_RD0_HAND_4WL_GetValue() << 0) | (IO_RD1_HAND_4W_GetValue() << 1) 
+	{	
+        Delay_128msec(1);
+		Hand_Status_NEW = (IO_RD0_HAND_4WL_GetValue() << 0) | (IO_RD1_HAND_4W_GetValue() << 1) 
 							| (IO_RD4_HAND_2WL_GetValue() << 4) | (IO_RD5_HAND_2W_GetValue() << 5);
-		if(Gear_Status_NEW == _4WDLOCK_2)
-			Gear_Status_NEW = _4WDLOCK_1;
-		if(Gear_Status_NEW == _4WD_2)
-			Gear_Status_NEW = _4WD_1;
+		if(Hand_Status_NEW == _4WDLOCK_2)
+			Hand_Status_NEW = _4WDLOCK_1;
+		if(Hand_Status_NEW == _4WD_2)
+			Hand_Status_NEW = _4WD_1;
 			
-		switch(Gear_Status_NEW)
+		switch(Hand_Status_NEW)
 		{
 					case _4WDLOCK_1:
 					case _2WDLOCK:
@@ -465,9 +467,9 @@ void Error_Exit_Func(void)
 /******************************************************************************
 *   Error model 
 ******************************************************************************/
-void Error_Mode_Func(unsigned char Goto,unsigned char Status)
+void Error_Mode_Func(unsigned char Goto,unsigned char Old_Status)
 {
-    Moving_Status = Status;
+    Moving_Status = Old_Status;
     _5S_CNT = _1S_Val;															
     Work_status = 1;
     Voltage_Error = IsVoltageError();
@@ -476,6 +478,21 @@ void Error_Mode_Func(unsigned char Goto,unsigned char Status)
     switch (Goto)
     {
         case _4WDLOCK_1:
+            if ((Old_Status == _2WD) || (Old_Status == _2WDLOCK) )
+            {
+                while((IO_RA3_Y_Signal_GetValue() == 1) )
+                {
+                    Motor1_F();
+                    if (Error_Flag == 1)
+                    {
+                        Front_Error = 1;
+                        Error_Exit_Func();
+                        return;
+                    }
+                }
+                 
+            }
+            
             while(IO_RA0_WG_Signal_GetValue() == 0)
             {
                 Motor1_F();
@@ -485,7 +502,7 @@ void Error_Mode_Func(unsigned char Goto,unsigned char Status)
                     Error_Exit_Func();
                 }
             }
-            IO_RD6_RELAY_SetHigh(); //relay
+            IO_RD6_RELAY_SetLow(); //relay後差訊號
             Front_Error = 0;
             Error_Exit_Func();
             break;
@@ -502,7 +519,7 @@ void Error_Mode_Func(unsigned char Goto,unsigned char Status)
                         Error_Exit_Func();
                     }
                 }
-                IO_RD6_RELAY_SetHigh(); //relay
+                IO_RD6_RELAY_SetLow(); //relay後差訊號
                 Front_Error = 0;
                 Error_Exit_Func();
             }
@@ -518,12 +535,25 @@ void Error_Mode_Func(unsigned char Goto,unsigned char Status)
                         Error_Exit_Func();
                     }
                 }
-                IO_RD6_RELAY_SetHigh(); //relay
+                IO_RD6_RELAY_SetLow(); //後差訊號
                 Front_Error = 0;
                 Error_Exit_Func();
             }
             break;
         case _2WDLOCK:
+            if ((Old_Status == _4WDLOCK_1) )
+            {
+                while(IO_RA3_Y_Signal_GetValue() == 0)
+                {
+                    Motor1_R();
+                    if (Error_Flag == 1)
+                    {
+                        Front_Error = 1;
+                        Error_Exit_Func();
+                        return;
+                    }
+                }   
+            }
             while(IO_RA0_WG_Signal_GetValue() == 0)
             {
                 Motor1_R();
@@ -533,11 +563,24 @@ void Error_Mode_Func(unsigned char Goto,unsigned char Status)
                     Error_Exit_Func();
                 }
             }
-            IO_RD6_RELAY_SetHigh(); //relay
+            IO_RD6_RELAY_SetLow(); //後差訊號
             Front_Error = 0;
             Error_Exit_Func();
             break;
         case _2WD:
+            if ((Old_Status == _4WDLOCK_1) )
+            {
+                while(IO_RA3_Y_Signal_GetValue() == 0)
+                {
+                    Motor1_R();
+                    if (Error_Flag == 1)
+                    {
+                        Front_Error = 1;
+                        Error_Exit_Func();
+                        return;
+                    }
+                }   
+            }
             while(IO_RA0_WG_Signal_GetValue() == 0)
             {
                 Motor1_R();
@@ -547,13 +590,11 @@ void Error_Mode_Func(unsigned char Goto,unsigned char Status)
                     Error_Exit_Func();
                 }
             }
-            IO_RD6_RELAY_SetLow(); //relay
+            IO_RD6_RELAY_SetHigh(); //後差訊號
             Front_Error = 0;
             Error_Exit_Func();
             break;
-
     }
-
 }
 
 /******************************************************************************
@@ -561,9 +602,9 @@ void Error_Mode_Func(unsigned char Goto,unsigned char Status)
 *   Goto: 把手切換位置
 *   Status: 馬達位置
 ******************************************************************************/
-void Change_Func(unsigned char Goto,unsigned char Status)
+void Change_Func(unsigned char Goto,unsigned char Old_Status)
 {
-    Moving_Status = Status;
+    Moving_Status = Old_Status;
     _5S_CNT = _1S_Val;															
     Work_status = 1;
     Voltage_Error = IsVoltageError();
@@ -572,6 +613,21 @@ void Change_Func(unsigned char Goto,unsigned char Status)
     switch (Goto)
     {
         case _4WDLOCK_1:
+            if ((Old_Status == _2WD) || (Old_Status == _2WDLOCK) )
+            {
+                while((IO_RA3_Y_Signal_GetValue() == 1) )
+                {
+                    Motor1_F();
+                    if (Error_Flag == 1)
+                    {
+                        Front_Error = 1;
+                        Error_Exit_Func();
+                        return;
+                    }
+                }
+                 
+            }
+           
             while(IO_RA0_WG_Signal_GetValue() == 0)
             {
                 Motor1_F();
@@ -579,9 +635,11 @@ void Change_Func(unsigned char Goto,unsigned char Status)
                 {
                     Front_Error = 1;
                     Error_Exit_Func();
+                    return;
                 }
             }
-            IO_RD6_RELAY_SetHigh(); //relay
+            
+            IO_RD6_RELAY_SetLow(); //relay後差訊號
             Front_Error = 0;
             Error_Exit_Func();
             break;
@@ -596,9 +654,10 @@ void Change_Func(unsigned char Goto,unsigned char Status)
                     {
                         Front_Error = 1;
                         Error_Exit_Func();
+                        return;
                     }
                 }
-                IO_RD6_RELAY_SetHigh(); //relay
+                IO_RD6_RELAY_SetLow(); //relay後差訊號
                 Front_Error = 0;
                 Error_Exit_Func();
             }
@@ -612,14 +671,28 @@ void Change_Func(unsigned char Goto,unsigned char Status)
                     {
                         Front_Error = 1;
                         Error_Exit_Func();
+                        return;
                     }
                 }
-                IO_RD6_RELAY_SetHigh(); //relay
+                IO_RD6_RELAY_SetLow(); //relay後差訊號
                 Front_Error = 0;
                 Error_Exit_Func();
             }
             break;
         case _2WDLOCK:
+            if ((Old_Status == _4WDLOCK_1) )
+            {
+                while(IO_RA3_Y_Signal_GetValue() == 0)
+                {
+                    Motor1_R();
+                    if (Error_Flag == 1)
+                    {
+                        Front_Error = 1;
+                        Error_Exit_Func();
+                        return;
+                    }
+                }   
+            }
             while(IO_RA0_WG_Signal_GetValue() == 0)
             {
                 Motor1_R();
@@ -627,13 +700,27 @@ void Change_Func(unsigned char Goto,unsigned char Status)
                 {
                     Front_Error = 1;
                     Error_Exit_Func();
+                    return;
                 }
             }
-            IO_RD6_RELAY_SetHigh(); //relay
+            IO_RD6_RELAY_SetLow(); //relay後差訊號
             Front_Error = 0;
             Error_Exit_Func();
             break;
         case _2WD:
+            if ((Old_Status == _4WDLOCK_1) )
+            {
+                while(IO_RA3_Y_Signal_GetValue() == 0)
+                {
+                    Motor1_R();
+                    if (Error_Flag == 1)
+                    {
+                        Front_Error = 1;
+                        Error_Exit_Func();
+                        return;
+                    }
+                }   
+            }
             while(IO_RA0_WG_Signal_GetValue() == 0)
             {
                 Motor1_R();
@@ -641,13 +728,13 @@ void Change_Func(unsigned char Goto,unsigned char Status)
                 {
                     Front_Error = 1;
                     Error_Exit_Func();
+                    return;
                 }
             }
-            IO_RD6_RELAY_SetLow(); //relay
+            IO_RD6_RELAY_SetHigh(); //relay後差訊號
             Front_Error = 0;
             Error_Exit_Func();
             break;
-
     }
 }
 
@@ -676,7 +763,6 @@ void Compare_Motor_Position(void)
     {
         Compare_Error = 1;
     }
-    
 }
 
 /******************************************************************************
@@ -686,29 +772,49 @@ void Output_ECU(void)
 {
     if(Handback_Error == 1)
     {
-        IO_RD7_ECU_2W_SetLow(); 
-        IO_RB0_ECU_4W_SetLow(); 
-        IO_RB1_ECU_4WL_SetLow(); 
-        IO_RB2_ECU_2WL_SetLow(); 
+        IO_RD7_ECU_2W_SetHigh(); 
+        IO_RB0_ECU_4W_SetHigh(); 
+        IO_RB1_ECU_4WL_SetHigh(); 
+        IO_RB2_ECU_2WL_SetHigh(); 
 
     }
     else if (Error_Mode == 1)
     {
+        IO_RD7_ECU_2W_SetHigh(); 
+        IO_RB0_ECU_4W_SetHigh(); 
+        IO_RB1_ECU_4WL_SetHigh(); 
+        IO_RB2_ECU_2WL_SetHigh(); 
+
+    }
+    //else if((Motor_Temp == Status_2WD) && (IO_RD6_RELAY_GetValue() == 0))
+    else if(Motor_Temp == Status_2WDL)
+    {
+        IO_RD7_ECU_2W_SetHigh(); 
+        IO_RB0_ECU_4W_SetHigh(); 
+        IO_RB1_ECU_4WL_SetHigh(); 
+        IO_RB2_ECU_2WL_SetLow(); 
     }
     else if(Motor_Temp == Status_2WD)
     {
-    }
-    else if((Motor_Temp == Status_2WD) && (IO_RD6_RELAY_GetValue() == 1))
-    {
+        IO_RD7_ECU_2W_SetLow(); 
+        IO_RB0_ECU_4W_SetHigh(); 
+        IO_RB1_ECU_4WL_SetHigh(); 
+        IO_RB2_ECU_2WL_SetHigh(); 
     }
     else if((Motor_Temp == Status_4WD_1) || (Motor_Temp == Status_4WD_2))
     {
+        IO_RD7_ECU_2W_SetHigh(); 
+        IO_RB0_ECU_4W_SetLow(); 
+        IO_RB1_ECU_4WL_SetHigh(); 
+        IO_RB2_ECU_2WL_SetHigh(); 
     }
     else if(Motor_Temp == Status_4WDL)
     {
+        IO_RD7_ECU_2W_SetHigh(); 
+        IO_RB0_ECU_4W_SetHigh(); 
+        IO_RB1_ECU_4WL_SetLow(); 
+        IO_RB2_ECU_2WL_SetHigh(); 
     }
-        
-    
 }
 
 /******************************************************************************
@@ -716,7 +822,7 @@ void Output_ECU(void)
 ******************************************************************************/
 void Check_Status(void)
 {
-    switch(Gear_Status_NEW)
+    switch(Hand_Status_NEW)
     {
         case _4WDLOCK_1:
             if((Motor_Temp == Status_4WDL))
@@ -726,7 +832,7 @@ void Check_Status(void)
             }
             break;
         case _2WDLOCK: // check issue?
-            if((Motor_Temp == Status_2WD) && (IO_RD6_RELAY_GetValue() == 1))
+            if(Motor_Temp == Status_2WDL) 
             {
                 Error_Mode = 0;
                 Pull_Error = 0;
@@ -749,7 +855,6 @@ void Check_Status(void)
         default:
             Error_Mode = 1;
             Pull_Error = 1;
-
     }
 }
 /**

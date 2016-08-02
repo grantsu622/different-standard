@@ -64,7 +64,7 @@
 /**
   Section: Macro Declarations
 */
-#define TMR2_INTERRUPT_TICKER_FACTOR    2
+#define TMR2_INTERRUPT_TICKER_FACTOR    1
 
 #define TMR2_FLAG_1S                  (uint8_t)(0x01)        // bit0, (1 S)
 #define TMR2_FLAG_5S                  (uint8_t)(0x02)        // bit1, (5 S)
