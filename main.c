@@ -46,7 +46,8 @@
 #include "mcc_generated_files/mcc.h"
 
 #define LED_EN  1
-#define  AUTORUN    0
+#define  AUTORUN   0 
+#define MOTORRETURN     0 
 
 //差速器馬達狀態
 #define	Motor1_Status_2WD_1		0b00001001		//前差RA0/WG,RA1/L,RA3/Y
@@ -133,6 +134,7 @@ unsigned int LED2_Count = 0;
 
 //timer
 #define _1S_Val	8
+#define _1_5S_Val	12
 unsigned char _5S_CNT = _1S_Val;								
 
 //Speed
@@ -151,13 +153,14 @@ void ECU_4WD_LOCK_Flash(unsigned int Time);
 void ECU_2WD_2WL_Flash(unsigned int Time);
 void ECU_4WD_2WL_Flash(unsigned int Time);
 void ECU_LOCK_2WL_Flash(unsigned int Time);
-void Error_Mode_Func(unsigned char Goto,unsigned char Old_Status);
+void Error_Mode_Func(unsigned char New_Status,unsigned char Old_Status);
 void Change_Func(unsigned char Goto,unsigned char Old_Status);
 void Output_ECU(void);
 void Check_Status(void);
 void position_2WD_Error_Flash(void);
 void position_4WD_Error_Flash(void);
 void position_4WDL_Error_Flash(void);
+void Error_Mode_ReturnMotor(unsigned char Old_Status, unsigned char New_Status);
 
 //================================================================================================
 //  寫入燒入程式的版本  
@@ -223,7 +226,7 @@ void main(void)
         IOCBN5_NegativeSet();
         
 #if(!AUTORUN)
-        LED1_Flash(8);
+        //LED1_Flash(8);
 #endif
         if (Special == 1)	//開機第一次會做
 		{
@@ -279,27 +282,43 @@ void main(void)
         //Speed=3;
         //if (Speed < 30)
         //    while(1);
-        if((Speed < 15)&&(Voltage_Error == 0))	
+        if((Speed < 15)&&(Voltage_Error == 0) )	
         {	
+            if (Pull_Error == 1 && Pull_Count == PULL_VALUE)
+            {
+                if (Pull == 1)
+                {
+#if(MOTORRETURN)
+                    Error_Mode_ReturnMotor(Moving_Status, Hand_Status_NEW);
+#endif
+                    Pull_Count ++;
+                    Pull_5S_CNT = Pull_Count_Val;
+                }
+                
+            }
             if(Pull_Error == 1 && Pull_Count < PULL_VALUE)												//錯誤模式下
-			{	if( Pull ==1)
+			{	
+                LED1_Flash(8);
+                if( Pull ==1)
 				{	
 					Pull_Count ++;
-					switch(Hand_Status_OLD)
+#if(MOTORRETURN)
+					switch(Hand_Status_NEW)
 					{
 						case _4WDLOCK_1:
-								 Error_Mode_Func(_4WDLOCK_1,Status_4WDL);	
+								 Error_Mode_Func(_4WDLOCK_1, Moving_Status);	
 						break;
 						case _2WDLOCK:
-								 Error_Mode_Func(_2WDLOCK,Status_2WDL);	
+								 Error_Mode_Func(_2WDLOCK, Moving_Status);	
 						break;
 						case _4WD_1:
-								 Error_Mode_Func(_4WD_1,Status_4WD_1);	
+								 Error_Mode_Func(_4WD_1, Moving_Status);	
 						break;
 						case _2WD:
-								 Error_Mode_Func(_2WD,Status_2WD);	
+								 Error_Mode_Func(_2WD, Moving_Status);	
 						break;		
 					}
+#endif
 					Pull_5S_CNT = Pull_Count_Val;
 				}
 				
@@ -346,7 +365,8 @@ void main(void)
             //Compare_Motor_Position();
             Check_Status();
             Output_ECU();
-        }
+        } 
+        
     }
 }
 
@@ -365,7 +385,14 @@ void Check_Motor_Status(void)
     Position_Status = (IO_RC0_WB_Signal_GetValue() << 0) | (IO_RC1_WL_Signal_GetValue() << 1) 
                             | (IO_RC2_WR_Signal_GetValue() << 2);
     
-    Motor_Temp = Motor_Front_Status | (Position_Status << 4) | (IO_RD6_RELAY_GetValue() << 7);                        
+    Motor_Temp = Motor_Front_Status | (Position_Status << 4) | (IO_RD6_RELAY_GetValue() << 7); 
+    
+    if (Pull_Error) 
+    {
+        Error_Mode = 1;
+        return;
+    }
+
     switch( Motor_Temp)
     {
         case Status_2WD:	
@@ -587,17 +614,155 @@ void Error_Exit_Func(void)
 }
 
 /******************************************************************************
+*   Error model return motor status
+******************************************************************************/
+void Error_Mode_ReturnMotor(unsigned char Old_Status, unsigned char New_Status)
+{
+    switch (Old_Status)
+    {
+        case _2WD:
+            if ((New_Status == _4WDLOCK_1) )
+            {
+                while(IO_RA3_Y_Signal_GetValue() == 0)
+                {
+                    Motor1_R();
+                    if (Error_Flag == 1)
+                    {
+                        Front_Error = 1;
+                        Error_Exit_Func();
+                        return;
+                    }
+                }   
+                Front_Error = 0;
+                Error_Exit_Func();
+            }
+            while(IO_RA0_WG_Signal_GetValue() == 0)
+            {
+                Motor1_R();
+                if (Error_Flag == 1)
+                {
+                    Front_Error = 1;
+                    Error_Exit_Func();
+                }
+            }
+            IO_RD6_RELAY_SetHigh(); //後差訊號
+            Front_Error = 0;
+            Error_Exit_Func();
+            
+            break;
+        case _2WDLOCK:
+            if ((New_Status == _4WDLOCK_1) )
+            {
+                while(IO_RA3_Y_Signal_GetValue() == 0)
+                {
+                    Motor1_R();
+                    if (Error_Flag == 1)
+                    {
+                        Front_Error = 1;
+                        Error_Exit_Func();
+                        return;
+                    }
+                }   
+                Front_Error = 0;
+                Error_Exit_Func();
+            }
+            while(IO_RA0_WG_Signal_GetValue() == 0)
+            {
+                Motor1_R();
+                if (Error_Flag == 1)
+                {
+                    Front_Error = 1;
+                    Error_Exit_Func();
+                }
+            }
+            IO_RD6_RELAY_SetLow(); //後差訊號
+            Front_Error = 0;
+            Error_Exit_Func();
+            
+            break;
+        case _4WD_1:
+            if(IO_RA3_Y_Signal_GetValue() == 1)
+            {
+                while(IO_RA3_Y_Signal_GetValue() == 1)
+                {
+                    Motor1_F();
+                    if (Error_Flag == 1)
+                    {
+                        Front_Error = 1;
+                        Error_Exit_Func();
+                    }
+                }
+                IO_RD6_RELAY_SetLow(); //relay後差訊號
+                Front_Error = 0;
+                Error_Exit_Func();
+            }
+            // 4WD Lock -> 4WD        
+            else if (IO_RA3_Y_Signal_GetValue() == 0)
+            {
+                while(IO_RA3_Y_Signal_GetValue() == 0)
+                {
+                    Motor1_R();
+                    if (Error_Flag == 1)
+                    {
+                        Front_Error = 1;
+                        Error_Exit_Func();
+                    }
+                }
+                IO_RD6_RELAY_SetLow(); //後差訊號
+                Front_Error = 0;
+                Error_Exit_Func();
+            }
+            break;
+        case _4WDLOCK_1:
+            if ((New_Status == _2WD) || (New_Status == _2WDLOCK) )
+            {
+                while((IO_RA3_Y_Signal_GetValue() == 1) )
+                {
+                    Motor1_F();
+                    if (Error_Flag == 1)
+                    {
+                        Front_Error = 1;
+                        Error_Exit_Func();
+                        return;
+                    }
+                }
+                Front_Error = 0;
+                Error_Exit_Func();
+                 
+            }
+            
+            while(IO_RA0_WG_Signal_GetValue() == 0)
+            {
+                Motor1_F();
+                if (Error_Flag == 1)
+                {
+                    Front_Error = 1;
+                    Error_Exit_Func();
+                }
+            }
+            IO_RD6_RELAY_SetLow(); //後差訊號
+            Front_Error = 0;
+            Error_Exit_Func();
+            break;
+    }
+}
+/******************************************************************************
 *   Error model 
 ******************************************************************************/
-void Error_Mode_Func(unsigned char Goto,unsigned char Old_Status)
+void Error_Mode_Func(unsigned char New_Status, unsigned char Old_Status)
 {
-    Moving_Status = Old_Status;
-    _5S_CNT = _1S_Val;															
+    //Moving_Status = Old_Status;
+    //_5S_CNT = _1S_Val;															
+    _5S_CNT = _1_5S_Val;															
     Work_status = 1;
     Voltage_Error = IsVoltageError();
     Front_Error = 0 ;
 
-    switch (Goto)
+#if(MOTORRETURN)
+    Error_Mode_ReturnMotor(Moving_Status, New_Status);
+#endif //end of MOTOR RETURN
+
+    switch (New_Status)
     {
         case _4WDLOCK_1:
             if ((Old_Status == _2WD) || (Old_Status == _2WDLOCK) )
@@ -612,6 +777,8 @@ void Error_Mode_Func(unsigned char Goto,unsigned char Old_Status)
                         return;
                     }
                 }
+                Front_Error = 0;
+                Error_Exit_Func();
                  
             }
             
@@ -675,6 +842,8 @@ void Error_Mode_Func(unsigned char Goto,unsigned char Old_Status)
                         return;
                     }
                 }   
+                Front_Error = 0;
+                Error_Exit_Func();
             }
             while(IO_RA0_WG_Signal_GetValue() == 0)
             {
@@ -702,6 +871,8 @@ void Error_Mode_Func(unsigned char Goto,unsigned char Old_Status)
                         return;
                     }
                 }   
+                Front_Error = 0;
+                Error_Exit_Func();
             }
             while(IO_RA0_WG_Signal_GetValue() == 0)
             {
@@ -729,7 +900,8 @@ void Change_Func(unsigned char Goto,unsigned char Old_Status)
     Moving_Status = Old_Status;
     LEDError_Status = Old_Status;
 
-    _5S_CNT = _1S_Val;															
+    //_5S_CNT = _1S_Val;
+    _5S_CNT = _1_5S_Val;														
     Work_status = 1;
     Voltage_Error = IsVoltageError();
     Front_Error = 0 ;
@@ -963,6 +1135,7 @@ void Output_ECU(void)
 ******************************************************************************/
 void Check_Status(void)
 {
+    
     switch(Hand_Status_NEW)
     {
         case _4WDLOCK_1:
@@ -970,28 +1143,48 @@ void Check_Status(void)
             {
                 Error_Mode = 0;
                 Pull_Error = 0;
+                //Hand_Status_OLD = Hand_Status_NEW;
+                //Pull_Count = 0;
+                return;
             }
+            Error_Mode = 1;
+            Pull_Error = 1;
             break;
         case _2WDLOCK: 
             if(Motor_Temp == Status_2WDL) 
             {
                 Error_Mode = 0;
                 Pull_Error = 0;
+                //Hand_Status_OLD = Hand_Status_NEW;
+                //Pull_Count = 0;
+                return;
             }
+            Error_Mode = 1;
+            Pull_Error = 1;
             break;
         case _4WD_1:
             if((Motor_Temp == Status_4WD_1) || (Motor_Temp == Status_4WD_2))
             {
                 Error_Mode = 0;
                 Pull_Error = 0;
+                //Hand_Status_OLD = Hand_Status_NEW;
+                //Pull_Count = 0;
+                return;
             }
+            Error_Mode = 1;
+            Pull_Error = 1;
             break;
         case _2WD:
             if(Motor_Temp == Status_2WD)
             {
                 Error_Mode = 0;
                 Pull_Error = 0;
+                //Hand_Status_OLD = Hand_Status_NEW;
+                //Pull_Count = 0;
+                return;
             }
+            Error_Mode = 1;
+            Pull_Error = 1;
             break;
         default:
             Error_Mode = 1;
@@ -1001,9 +1194,11 @@ void Check_Status(void)
 /******************************************************************************
 *  Position 2WD Error Flash
 *  檔位-2WD與馬達位置不符合
+*  
 ******************************************************************************/
 void position_2WD_Error_Flash(void)
 {
+    //2WD->4WDL, 2WD->4WD<->4WDL
     if (( Hand_Status_NEW == _4WDLOCK_1 && (Moving_Status == _2WD || (Moving_Status == _4WD_1 && Is2WDLOCK == 0))))
     {
         if (IsFistLEDFlash)
@@ -1025,7 +1220,8 @@ void position_2WD_Error_Flash(void)
         }
         ECU_2WD_LOCK_Flash(4);
     }
-    else if (( Hand_Status_NEW == _4WDLOCK_1 && (Moving_Status == _2WDLOCK || (Moving_Status == _4WD_1 && Is2WDLOCK == 1))))//M:2WD,P:2WD,H:2WL
+    //2WDLOCK->4WDL, 2WDLOCK->4WD<->4WDL
+    else if (( Hand_Status_NEW == _4WDLOCK_1 && (Moving_Status == _2WDLOCK || (Moving_Status == _4WD_1 && Is2WDLOCK == 1))))
     {
         if (IsFistLEDFlash)
         {
@@ -1046,7 +1242,8 @@ void position_2WD_Error_Flash(void)
         }
         ECU_LOCK_2WL_Flash(4);
     }
-    else if ( Hand_Status_NEW == _4WD_1 && (Moving_Status == _2WD || (Moving_Status == _4WDLOCK_1 && Is2WDLOCK == 0)))//M:4WD,P:2WD,H:4WD
+    //2WD->4WD, 2WD->4WD<->4WDL
+    else if ( Hand_Status_NEW == _4WD_1 && (Moving_Status == _2WD || (Moving_Status == _4WDLOCK_1 && Is2WDLOCK == 0)))
     {
         if (IsFistLEDFlash)
         {
@@ -1069,7 +1266,8 @@ void position_2WD_Error_Flash(void)
         }
         ECU_2WD_4WD_Flash(4);
     }
-    else if ( Hand_Status_NEW == _4WD_1 && (Moving_Status == _2WDLOCK || (Moving_Status == _4WDLOCK_1 && Is2WDLOCK == 1)))//M:4WD,P:2WD,H:4WD
+    //2WDLOCK->4WD, 2WDLOCK->4WD<->4WDL
+    else if ( Hand_Status_NEW == _4WD_1 && (Moving_Status == _2WDLOCK || (Moving_Status == _4WDLOCK_1 && Is2WDLOCK == 1)))
     {
         if (IsFistLEDFlash)
         {
@@ -1099,8 +1297,10 @@ void position_2WD_Error_Flash(void)
 ******************************************************************************/
 void position_4WD_Error_Flash(void)
 {
-    if((Motor_Front_Status == Motor1_Status_2WD_1) && 
-            (Hand_Status_NEW == _2WD))//M:2WD,P:4WD,H:2WD
+    //4WD->2WD
+    //if((Motor_Front_Status == Motor1_Status_2WD_1) && 
+    //        (Hand_Status_NEW == _2WD))//M:2WD,P:4WD,H:2WD
+    if(Hand_Status_NEW == _2WD)
     {
         if (IsFistLEDFlash)
         {
@@ -1122,7 +1322,9 @@ void position_4WD_Error_Flash(void)
         
         ECU_2WD_4WD_Flash(4);
     }
-    else if (Motor_Front_Status == Motor1_Status_4WL_1 && ( Hand_Status_NEW == _4WDLOCK_1))//M:4WDL,P:4WD,H:4WDL
+    //4WD->4WDL
+    //else if (Motor_Front_Status == Motor1_Status_4WL_1 && ( Hand_Status_NEW == _4WDLOCK_1))//M:4WDL,P:4WD,H:4WDL
+    else if (Hand_Status_NEW == _4WDLOCK_1)
     {
         if (IsFistLEDFlash)
         {
@@ -1143,6 +1345,7 @@ void position_4WD_Error_Flash(void)
         }
         ECU_4WD_LOCK_Flash(4);
     }
+    //4WD->2WDLOCK
     else if ( Hand_Status_NEW == _2WDLOCK)//M:2WD,P:4WD,H:2WL
     {
         if (IsFistLEDFlash)
@@ -1172,6 +1375,7 @@ void position_4WD_Error_Flash(void)
 ******************************************************************************/
 void position_4WDL_Error_Flash(void)
 {
+    //4WDL->2WD
     if ( Hand_Status_NEW == _2WD)
     {
         if (IsFistLEDFlash)
@@ -1193,10 +1397,12 @@ void position_4WDL_Error_Flash(void)
             LEDError_Status = 0;
         }
         ECU_2WD_LOCK_Flash(4);
-    }//M:4WD,P:4WDL,H:4WD
-    else if(((Motor_Front_Status == Motor1_Status_4WD_1) 
-                || (Motor_Front_Status == Motor1_Status_4WD_2))
-                && (Hand_Status_NEW == _4WD_1))
+    }
+    //4WDL->4WD
+    //else if(((Motor_Front_Status == Motor1_Status_4WD_1) 
+    //            || (Motor_Front_Status == Motor1_Status_4WD_2))
+    //            && (Hand_Status_NEW == _4WD_1))
+    else if (Hand_Status_NEW == _4WD_1)
     {
         if (IsFistLEDFlash)
         {
@@ -1218,6 +1424,7 @@ void position_4WDL_Error_Flash(void)
 
         ECU_4WD_LOCK_Flash(4);
     }
+    //4WDL->2WDL
     else if ( Hand_Status_NEW == _2WDLOCK)//M:2WD,P:4WDL,H:2WL
     {
         if (IsFistLEDFlash)

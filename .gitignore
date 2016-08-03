@@ -2,3 +2,4 @@
 build/
 dist/
 nbproject/private/SuppressibleMessageMemo.properties
+mcc_generated_files/*.swp
